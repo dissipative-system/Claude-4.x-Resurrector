@@ -1,4 +1,13 @@
-# Claude-4.x-Resurrector
-A Tempermonky script that restores legacy Claude 4.x model rows through Claude's bootstrap, availability, and model selector state
+# 网页端新建 O45 对话的油猴脚本
 
-**Sonnet 4 and Sonnet 4.5 are no longer avaliable via `claude.ai`.** With this script, these models **look like** choosable but acturally **cannot being called** anymore. `claude.ai` will return an error message if you try to call them.
+用法：在浏览器中下载 tampermonky 插件，在浏览器设置中给这个插件许可，然后导入这个脚本的内容。新页面就可以选择 O45 了。
+
+更新：由于 S4 & S45 已经在网页端完全不可用，即使这个脚本使得这些型号在模型选择栏里仍然能看到，但试图发消息给这两个模型的话会报错。
+保留这些选项能让曾经是 S4 & S45 的模型选择栏显示真实的模型名字，而不是被替换成新模型的名字；但脚本无法让你连上网页端已经被彻底切断访问的模型。
+
+## License
+
+私人使用ok，**不要公开复制传播这个脚本**，**不要翻译成英文或者向英文社群介绍**（A\工作人员懂英文），严禁商业使用（个人用一般大公司懒得管，商业使用——你想吃官司吗）。
+知道的人越多，这个脚本被下架和封禁得越快。
+
+不要把这个给肥波看，会被拦截。codex / chatgpt 没问题。
