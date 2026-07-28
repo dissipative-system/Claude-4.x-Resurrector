@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Claude 4.x Models Resurrector
 // @namespace    http://tampermonkey.net/
-// @version      5.4
-// @description  Restore legacy Claude 4.x model rows through Claude's bootstrap, availability, and model selector state
+// @version      5.5
+// @description  Restore legacy Claude 4.x model rows through Claude's eager bootstrap, availability, and model selector state
 // @match        https://claude.ai/*
 // @grant        none
 // @run-at       document-start
-// @author	 gpt-5.5 (via codex)
+// @author	 gpt-5.6-sol (via codex)
 // ==/UserScript==
 
 (function () {
@@ -249,6 +249,7 @@
     };
 
     const state = {
+        eagerBootstrapPatches: 0,
         bootstrapPatches: 0,
         cachePatches: 0,
         availableModelPatches: 0,
@@ -264,7 +265,10 @@
         forceModel: normalizeModelId(readStoredForceModel())
     };
     const pendingSelectorModels = new Map();
+    const patchedBootstrapPromises = new WeakMap();
+    const patchedResponses = new WeakSet();
 
+    installBootstrapPreloadHook();
     installPreloadedCacheHooks();
     patchPreloadedCaches();
     scheduleCachePatches();
@@ -304,7 +308,7 @@
         }
     };
 
-    console.info(SCRIPT, 'v5.4 loaded. Bootstrap, availability, selector-state, and preloaded-cache patches are active.');
+    console.info(SCRIPT, 'v5.5 loaded. Eager bootstrap, availability, selector-state, and preloaded-cache patches are active.');
 
     async function patchOutgoingRequest(input, init) {
         const url = getUrl(input);
@@ -369,6 +373,9 @@
 
     async function patchIncomingResponse(url, method, response) {
         if (!url || !isClaudeApiUrl(url)) {
+            return response;
+        }
+        if (response && typeof response === 'object' && patchedResponses.has(response)) {
             return response;
         }
 
@@ -522,6 +529,10 @@
             const existing = config.models.find(row => row && row.id === template.id);
             if (existing) {
                 Object.assign(existing, clone(template));
+                delete existing.disabled;
+                delete existing.disabled_reason;
+                delete existing.inactive;
+                delete existing.deprecated;
                 continue;
             }
             config.models.push(clone(template));
@@ -574,6 +585,44 @@
             return true;
         }
         return Array.isArray(rows) && rows.some(row => row && normalizeModelId(row.id));
+    }
+
+    function installBootstrapPreloadHook() {
+        hookGlobalValue('__BOOTSTRAP_PRELOAD__', value => {
+            return transformBootstrapPreload(value);
+        });
+    }
+
+    function transformBootstrapPreload(value) {
+        if (!value || typeof value !== 'object') {
+            return value;
+        }
+
+        const promise = value.promise;
+        if (!promise || typeof promise.then !== 'function') {
+            return value;
+        }
+
+        const alreadyPatched = patchedBootstrapPromises.get(promise);
+        if (alreadyPatched) {
+            value.promise = alreadyPatched;
+            return value;
+        }
+
+        const preloadUrl = typeof value.path === 'string' ? value.path : '';
+        const patchedPromise = promise.then(response => {
+            const responseUrl = preloadUrl || response?.url || '';
+            if (!isBootstrapUrl(responseUrl)) {
+                return response;
+            }
+            state.eagerBootstrapPatches += 1;
+            return patchIncomingResponse(responseUrl, 'GET', response);
+        });
+
+        patchedBootstrapPromises.set(promise, patchedPromise);
+        patchedBootstrapPromises.set(patchedPromise, patchedPromise);
+        value.promise = patchedPromise;
+        return value;
     }
 
     function installPreloadedCacheHooks() {
@@ -800,11 +849,13 @@
         headers.set('content-type', 'application/json');
         headers.delete('content-length');
         headers.delete('content-encoding');
-        return new Response(JSON.stringify(json), {
+        const patchedResponse = new Response(JSON.stringify(json), {
             status: response.ok ? response.status : 200,
             statusText: response.ok ? response.statusText : 'OK',
             headers
         });
+        patchedResponses.add(patchedResponse);
+        return patchedResponse;
     }
 
     function getUrl(input) {
